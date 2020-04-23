@@ -1,0 +1,51 @@
+#!/opt/insomnia/venvs/osquery/bin/python3
+
+"""
+List all of the VMs that are known to virsh (part of libvirt-clients).
+
+This plugin could be improved to use Python libraries specifically for interacting with libvirt rather than subprocess.
+
+Michael Fincham <michael.fincham@insomniasec.com> 2019-05-14
+"""
+
+import subprocess
+
+import osquery
+
+
+@osquery.register_plugin
+class VirshVmsPlugin(osquery.TablePlugin):
+    """List configured VMs in virsh"""
+
+    def name(self):
+        return "virsh_vms"
+
+    def columns(self):
+        return [
+            osquery.TableColumn(name="name", type=osquery.STRING),
+            osquery.TableColumn(name="uuid", type=osquery.STRING),
+        ]
+
+    def generate(self, context):
+        try:
+            vms = [
+                line.split()
+                for line in subprocess.run(
+                    "/usr/bin/virsh list --name --uuid --all".split(),
+                    stdout=subprocess.PIPE,
+                )
+                .stdout.decode("utf-8")
+                .strip()
+                .splitlines(False)
+            ]
+        except:
+            vms = []
+
+        query_data = []
+        for vm in vms:
+            query_data.append({"uuid": vm[0].upper(), "name": vm[1]})
+        return query_data
+
+
+if __name__ == "__main__":
+    osquery.start_extension(name="virsh_vms_table", version="1.0.0")

@@ -1,0 +1,79 @@
+#!/opt/insomnia/venvs/osquery/bin/python3
+
+"""
+Example of finding all the apt packages that are waiting to be updated (that are known locally to apt). This query is slow, please don't run it too often.
+
+This plugin could be improved to use Python libraries specifically for interacting with apt rather than subprocess.
+
+Michael Fincham <michael.fincham@insomniasec.com> 2019-06-05
+"""
+
+from os import listdir
+from os.path import isdir, join
+import subprocess
+
+import osquery
+
+
+@osquery.register_plugin
+class PendingUpdatesPlugin(osquery.TablePlugin):
+    """All packages waiting to be updated, and where they came from"""
+
+    def name(self):
+        return "pending_updates"
+
+    def columns(self):
+        return [
+            osquery.TableColumn(name="name", type=osquery.STRING),
+            osquery.TableColumn(name="installed", type=osquery.STRING),
+            osquery.TableColumn(name="pending", type=osquery.STRING),
+            osquery.TableColumn(name="source", type=osquery.STRING),
+        ]
+
+    def generate(self, context):
+        try:
+            packages = [
+                " ".join(line.split()[1:])
+                for line in subprocess.run(
+                    "/usr/bin/apt-get -s --just-print dist-upgrade".split(),
+                    stdout=subprocess.PIPE,
+                )
+                .stdout.decode("utf-8")
+                .strip()
+                .splitlines(False)
+                if line.startswith("Inst ")
+            ]
+        except:
+            return []
+
+        query_data = []
+        for package in packages:
+            try:
+                package_name = package.split()[0]
+                if package.split()[1].startswith("["):
+                    package_version = package.split()[1].strip("[]")
+                    package_pending = package.split(None, 2)[2].strip(" ()[]")
+                else:
+                    package_version = ""
+                    package_pending = package.split(None, 1)[1].strip(" ()[]")
+
+                package_pending, package_source = package_pending.split(None, 1)
+                if "[" in package_source:
+                    package_source = package_source.split("[")[0].strip()
+
+                query_data.append(
+                    {
+                        "name": package_name,
+                        "installed": package_version,
+                        "pending": package_pending,
+                        "source": package_source,
+                    }
+                )
+            except:
+                query_data.append({"name": str(package)})
+
+        return query_data
+
+
+if __name__ == "__main__":
+    osquery.start_extension(name="pending_updates_table", version="1.0.0")

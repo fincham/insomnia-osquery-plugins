@@ -1,0 +1,66 @@
+#!/opt/insomnia/venvs/osquery/bin/python3
+
+"""
+Collects the non-sensitive parts of the Duo PAM configuration (if it is configured).
+
+Michael Fincham <michael.fincham@insomniasec.com> 2019-10-09
+"""
+
+from os import listdir
+from os.path import isfile, join
+import configparser
+
+import osquery
+
+
+def load_duo_config(path):
+    config = configparser.ConfigParser()
+    config.read(path)
+    return [
+        {
+            "host": config["duo"]["host"],
+            "ikey": config["duo"]["ikey"],
+            "failmode": config["duo"].get("failmode", "safe"),
+            "http_proxy": config["duo"].get("http_proxy", ""),
+            "autopush": config["duo"].get("autopush", "no"),
+            "prompts": int(config["duo"].get("failmode", "3")),
+        }
+    ]
+
+
+@osquery.register_plugin
+class DuoConfigPlugin(osquery.TablePlugin):
+    """Return supported Duo configuration"""
+
+    def name(self):
+        return "duo_config"
+
+    def columns(self):
+        return [
+            osquery.TableColumn(name="host", type=osquery.STRING),
+            osquery.TableColumn(name="ikey", type=osquery.STRING),
+            osquery.TableColumn(name="failmode", type=osquery.STRING),
+            osquery.TableColumn(name="http_proxy", type=osquery.STRING),
+            osquery.TableColumn(name="autopush", type=osquery.STRING),
+            osquery.TableColumn(name="prompts", type=osquery.INTEGER),
+        ]
+
+    def generate(self, context):
+        paths = [
+            f
+            for f in ("/etc/security/pam_duo.conf", "/etc/duo/pam_duo.conf")
+            if isfile(f)
+        ]
+        output = []
+
+        try:
+            for path in paths:
+                output = output + load_duo_config(path)
+        except:
+            pass
+
+        return output
+
+
+if __name__ == "__main__":
+    osquery.start_extension(name="duo_config_table", version="1.0.0")

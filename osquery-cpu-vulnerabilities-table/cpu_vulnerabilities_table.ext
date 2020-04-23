@@ -1,0 +1,47 @@
+#!/opt/insomnia/venvs/osquery/bin/python3
+
+"""
+Check the new (Jan 2018) sysfs CPU vulnerabilities table on the machine to determine the state of e.g. Spectre and Meltdown bug mitigations.
+
+Michael Fincham <michael.fincham@insomniasec.com> 2019-05-19
+"""
+
+from os import listdir
+from os.path import isfile, join
+
+import osquery
+
+
+@osquery.register_plugin
+class CpuVulnerabilitiesPlugin(osquery.TablePlugin):
+    """What CPU vulnerabilities the kernel is aware of and what it's doing about them"""
+
+    def name(self):
+        return "cpu_vulnerabilities"
+
+    def columns(self):
+        return [
+            osquery.TableColumn(name="name", type=osquery.STRING),
+            osquery.TableColumn(name="state", type=osquery.STRING),
+        ]
+
+    def generate(self, context):
+        try:
+            paths = [
+                f
+                for f in listdir("/sys/devices/system/cpu/vulnerabilities")
+                if isfile(join("/sys/devices/system/cpu/vulnerabilities", f))
+            ]
+        except:
+            paths = []
+
+        query_data = []
+        for path in paths:
+            with open(join("/sys/devices/system/cpu/vulnerabilities", path), "r") as f:
+                state = f.read().strip()
+            query_data.append({"name": path, "state": state})
+        return query_data
+
+
+if __name__ == "__main__":
+    osquery.start_extension(name="cpu_vulnerabilities_table", version="1.0.0")

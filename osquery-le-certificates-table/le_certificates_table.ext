@@ -1,0 +1,98 @@
+#!/opt/insomnia/venvs/osquery/bin/python3
+
+"""
+List useful properties of all the currently in-use Let's Encrypt certs (e.g. those which will auto-renew) from /etc/letsencrypt.
+
+Michael Fincham <michael.fincham@insomniasec.com> 2020-02-11
+"""
+
+from os.path import isfile
+import glob
+import configparser
+
+from cryptography import x509
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+from cryptography.x509.oid import ExtensionOID, NameOID
+
+import osquery
+
+
+def load_renew_config(path):
+    with open(path, "r") as f:
+        file_content = "[default]\n%s" % f.read()
+    config = configparser.RawConfigParser()
+    config.read_string(file_content)
+    output = {
+        "cert": config["default"]["cert"],
+        "account": config["renewalparams"]["account"],
+        "authenticator": config["renewalparams"].get("authenticator", "none"),
+        "installer": config["renewalparams"].get("installer", "none"),
+        "server": config["renewalparams"]["server"],
+        "challenges": config["renewalparams"].get("pref_challs", "default"),
+        "manual_auth_hook": config["renewalparams"].get("manual_auth_hook", "none"),
+        "manual_cleanup_hook": config["renewalparams"].get(
+            "manual_cleanup_hook", "none"
+        ),
+    }
+
+    with open(output["cert"], "rb") as f:
+        cert = x509.load_pem_x509_certificate(f.read(), default_backend())
+
+    serial = cert.serial_number
+    output["serial"] = serial.to_bytes((serial.bit_length() + 7) // 8, "big").hex()
+
+    output["fingerprint_sha256"] = cert.fingerprint(hashes.SHA256()).hex()
+    output["subject_alt_names"] = ", ".join(
+        cert.extensions.get_extension_for_oid(
+            ExtensionOID.SUBJECT_ALTERNATIVE_NAME
+        ).value.get_values_for_type(x509.DNSName)
+    )
+    output["common_name"] = cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[
+        -1
+    ].value
+    output["not_before"] = cert.not_valid_before
+    output["not_after"] = cert.not_valid_after
+
+    return [output]
+
+
+@osquery.register_plugin
+class LetsEncryptCertsPlugin(osquery.TablePlugin):
+    """Check all in-use Let's Encrypt certificates"""
+
+    def name(self):
+        return "le_certificates"
+
+    def columns(self):
+        return [
+            osquery.TableColumn(name="common_name", type=osquery.STRING),
+            osquery.TableColumn(name="fingerprint_sha256", type=osquery.STRING),
+            osquery.TableColumn(name="serial", type=osquery.STRING),
+            osquery.TableColumn(name="not_before", type=osquery.STRING),
+            osquery.TableColumn(name="not_after", type=osquery.STRING),
+            osquery.TableColumn(name="subject_alt_names", type=osquery.STRING),
+            osquery.TableColumn(name="account", type=osquery.STRING),
+            osquery.TableColumn(name="authenticator", type=osquery.STRING),
+            osquery.TableColumn(name="installer", type=osquery.STRING),
+            osquery.TableColumn(name="manual_auth_hook", type=osquery.STRING),
+            osquery.TableColumn(name="manual_cleanup_hook", type=osquery.STRING),
+            osquery.TableColumn(name="challenges", type=osquery.STRING),
+            osquery.TableColumn(name="server", type=osquery.STRING),
+        ]
+
+    def generate(self, context):
+        paths = [f for f in glob.glob("/etc/letsencrypt/renewal/*.conf") if isfile(f)]
+
+        output = []
+        for path in paths:
+            try:
+                output += load_renew_config(path)
+            except:
+                pass
+
+        return output
+
+
+if __name__ == "__main__":
+    osquery.start_extension(name="le_certificates_table", version="1.0.0")
