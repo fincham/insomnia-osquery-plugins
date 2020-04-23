@@ -1,4 +1,4 @@
-#!/opt/insomnia/venvs/osquery/bin/python3
+#!/usr/bin/python3
 
 """
 List useful properties of all the currently in-use Let's Encrypt certs (e.g. those which will auto-renew) from /etc/letsencrypt.

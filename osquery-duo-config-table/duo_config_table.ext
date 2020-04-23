@@ -1,4 +1,4 @@
-#!/opt/insomnia/venvs/osquery/bin/python3
+#!/usr/bin/python3
 
 """
 Collects the non-sensitive parts of the Duo PAM configuration (if it is configured).

@@ -1,4 +1,4 @@
-#!/opt/insomnia/venvs/osquery/bin/python3
+#!/usr/bin/python3
 
 """
 Check the new (Jan 2018) sysfs CPU vulnerabilities table on the machine to determine the state of e.g. Spectre and Meltdown bug mitigations.

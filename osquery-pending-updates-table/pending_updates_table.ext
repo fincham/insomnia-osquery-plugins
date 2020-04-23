@@ -1,4 +1,4 @@
-#!/opt/insomnia/venvs/osquery/bin/python3
+#!/usr/bin/python3
 
 """
 Example of finding all the apt packages that are waiting to be updated (that are known locally to apt). This query is slow, please don't run it too often.
